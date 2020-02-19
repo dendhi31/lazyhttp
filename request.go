@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"time"
 
@@ -19,7 +20,6 @@ type Config struct {
 	MaxIdleConnection    int
 	IdleConnTimeout      time.Duration
 	MaxConnectionPerHost int
-	HTTPRequestTimeout   time.Duration
 
 	// InsecureSkipVerify controls whether a client verifies the
 	// server's certificate chain and host name.
@@ -27,7 +27,9 @@ type Config struct {
 	InsecureSkipVerify bool
 	Certificate        *tls.Certificate
 
-	MainTimeout time.Duration
+	MainTimeout        time.Duration
+	WaitHttp           time.Duration
+	HTTPRequestTimeout time.Duration
 
 	StorageHostServer    []string
 	TempStorageKeyPrefix string
@@ -41,15 +43,17 @@ type Requestor interface {
 
 // Client will handle http request response by extending go http.Client package
 type Client struct {
-	HTTPClient  *http.Client
-	CacheClient cache.Cacher
-	ExpiryTime  time.Duration
-	MainTimeOut time.Duration
+	HTTPClient         *http.Client
+	CacheClient        cache.Cacher
+	ExpiryTime         time.Duration
+	MainTimeOut        time.Duration
+	WaitHttp           time.Duration
+	HTTPRequestTimeout time.Duration
 }
 
 type HTTPResponse struct {
 	StatusCode int    `json:"status_code"`
-	Body       []byte `json:"body"`
+	Body       string `json:"body"`
 }
 
 // New will construct a customized http client
@@ -85,14 +89,17 @@ func New(config Config) (*Client, error) {
 	client.CacheClient = cacher
 	client.ExpiryTime = config.ExpiryTime
 	client.MainTimeOut = config.MainTimeout
-
+	client.WaitHttp = config.WaitHttp
+	client.HTTPRequestTimeout = config.HTTPRequestTimeout
 	return client, nil
 }
 
 // getFromRedis Get value from redis based on described Key
 func (httprequest *Client) getFromRedis(ctx context.Context, key string, redisChan chan bool, redisResChan chan []byte, redisErrChan chan error) {
 	//GET FROM REDIS
+	log.Println("Start request via redis")
 	cacheBody, err := httprequest.CacheClient.Get(key)
+	log.Println("Done request via redis")
 	if err != nil {
 		redisErrChan <- err
 		redisChan <- true
@@ -101,6 +108,7 @@ func (httprequest *Client) getFromRedis(ctx context.Context, key string, redisCh
 		close(redisErrChan)
 		return
 	}
+	log.Println("Response via Redis", cacheBody)
 	redisResChan <- []byte(cacheBody)
 	redisChan <- true
 	close(redisChan)
@@ -110,8 +118,17 @@ func (httprequest *Client) getFromRedis(ctx context.Context, key string, redisCh
 
 // doRequest Do HTTP Request to get response from server
 func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Request, key string, httpChan chan bool, httpResChan chan []byte, httpErrChan chan error) {
+	ctx, cancelHttp := context.WithTimeout(context.Background(), httprequest.HTTPRequestTimeout*time.Second)
+	defer cancelHttp()
+
+	time.Sleep(5 * time.Second)
+	log.Println("Start request via HTTP")
+
 	response, err := httprequest.HTTPClient.Do(httpRequest.WithContext(ctx))
+	log.Println("Done request via HTTP: ", response)
 	if err != nil {
+		log.Println("Error request via HTTP: ", err.Error())
+		log.Println("HTTP timeout: ", int(httprequest.HTTPRequestTimeout))
 		httpErrChan <- err
 		httpChan <- true
 		close(httpChan)
@@ -120,11 +137,11 @@ func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Requ
 		return
 	}
 	responseBody, _ := ioutil.ReadAll(response.Body)
-
+	log.Println("Response via HTTP", string(responseBody))
 	if response.StatusCode == http.StatusOK {
 		httpResponse := HTTPResponse{
 			StatusCode: response.StatusCode,
-			Body:       responseBody,
+			Body:       string(responseBody),
 		}
 		result, err := json.Marshal(httpResponse)
 		if err == nil {
@@ -145,7 +162,7 @@ func (httprequest *Client) SendRequest(ctx context.Context, url string, action s
 	var statusCode int
 	var responseBody []byte
 
-	mCtx, cancel := context.WithTimeout(context.Background(), httprequest.MainTimeOut*time.Second)
+	mCtx, cancel := context.WithTimeout(context.Background(), httprequest.WaitHttp*time.Second)
 	defer cancel()
 
 	body := bytes.NewBuffer(payload)
@@ -158,18 +175,19 @@ func (httprequest *Client) SendRequest(ctx context.Context, url string, action s
 		httpRequest.Header.Set(k, v)
 	}
 
-	httpChan := make(chan bool)
-	redisChan := make(chan bool)
+	httpChan := make(chan bool, 1)
+	redisChan := make(chan bool, 1)
 
-	httpResChan := make(chan []byte)
-	redisResChan := make(chan []byte)
+	httpResChan := make(chan []byte, 1)
+	redisResChan := make(chan []byte, 1)
 
-	httpErrChan := make(chan error)
-	redisErrChan := make(chan error)
+	httpErrChan := make(chan error, 1)
+	redisErrChan := make(chan error, 1)
 
 	go func() {
 		httprequest.doRequest(mCtx, httpRequest, key, httpChan, httpResChan, httpErrChan)
 	}()
+
 	go func() {
 		httprequest.getFromRedis(mCtx, key, redisChan, redisResChan, redisErrChan)
 	}()
@@ -184,6 +202,12 @@ func (httprequest *Client) SendRequest(ctx context.Context, url string, action s
 exit:
 	for {
 		select {
+		case <-mCtx.Done():
+			if httpStatus != true {
+				log.Println("http wait got timeout", int(httprequest.WaitHttp))
+				httpStatus = true
+				errHttp = errors.New("context timeout HTTP")
+			}
 		case httpBody = <-httpResChan:
 			break exit
 		case tempRedisBody := <-redisResChan:
@@ -207,19 +231,26 @@ exit:
 		}
 	}
 
+	var code int
+
 	if errHttp == nil {
 		responseBody = httpBody
 		if len(responseBody) == 0 {
 			err = errors.New("response body is empty")
+			code = http.StatusInternalServerError
+		} else {
+			code = http.StatusOK
 		}
 	} else {
 		if errRedis == nil {
 			responseBody = redisBody
 			err = nil
+			code = http.StatusOK
 		} else {
 			err = errHttp
+			code = http.StatusInternalServerError
 		}
 	}
 
-	return http.StatusOK, responseBody, err
+	return code, responseBody, err
 }

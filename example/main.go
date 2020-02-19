@@ -12,8 +12,9 @@ import (
 func main() {
 	httpReq, err := lazyhttp.New(lazyhttp.Config{
 		ExpiryTime:         10 * time.Minute,
-		HTTPRequestTimeout: 1 * time.Second,
-		MainTimeout:        1 * time.Second,
+		HTTPRequestTimeout: 13,
+		WaitHttp:           20,
+		MainTimeout:        20,
 		StorageHostServer:  strings.Split("127.0.0.1:5000,127.0.0.1:7001,127.0.0.1:7002", ","),
 	})
 	if err != nil {
