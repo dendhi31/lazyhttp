@@ -121,7 +121,6 @@ func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Requ
 	ctx, cancelHttp := context.WithTimeout(context.Background(), httprequest.HTTPRequestTimeout*time.Second)
 	defer cancelHttp()
 
-	time.Sleep(5 * time.Second)
 	log.Println("Start request via HTTP")
 
 	response, err := httprequest.HTTPClient.Do(httpRequest.WithContext(ctx))
