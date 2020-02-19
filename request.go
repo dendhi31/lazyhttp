@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dendhi31/stale-request/lazyhttp/cache"
+	"github.com/dendhi31/lazyhttp/cache"
 )
 
 // Config is a configuration that will be used when constructing a new instance of Requestor
