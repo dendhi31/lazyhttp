@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ func main() {
 		StorageHostServer: strings.Split("127.0.0.1:5000,127.0.0.1:7001,127.0.0.1:7002", ","),
 	})
 	if err != nil {
+		log.Fatal(err)
 		fmt.Println(err.Error())
 	}
 	httpCode, body, err := httpReq.SendRequest(context.Background(), "http://localhost:9096/foo", "GET", nil, nil, "test")

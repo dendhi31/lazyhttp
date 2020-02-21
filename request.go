@@ -133,15 +133,12 @@ func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Requ
 	ctx, cancelHttp := context.WithTimeout(context.Background(), httprequest.HTTPRequestTimeout*time.Second)
 	defer cancelHttp()
 
-	log.Println("Start request via HTTP")
-
 	var httpChanStruct httpChannel
 
 	response, err := httprequest.HTTPClient.Do(httpRequest.WithContext(ctx))
 	log.Println("Done request via HTTP: ", response)
 	if err != nil {
 		log.Println("Error request via HTTP: ", err.Error())
-		log.Println("HTTP timeout: ", int(httprequest.HTTPRequestTimeout))
 		httpChanStruct.ErrorChan = err
 		httpChan <- httpChanStruct
 		close(httpChan)
@@ -202,9 +199,9 @@ exit:
 	for {
 		select {
 		case <-mCtx.Done():
-			log.Println("http wait got timeout", int(httprequest.WaitHttp))
+			log.Println("HTTP wait got timeout", int(httprequest.WaitHttp))
 			httpResult.ErrorChan = errors.New("context timeout HTTP")
-			fmt.Println("set error http")
+			fmt.Println("Set error http")
 			break exit
 		case httpResult = <-httpChan:
 			if httpResult.ErrorChan == nil {
@@ -230,14 +227,13 @@ exit:
 	if httpResult.ErrorChan == nil {
 		responseBody = httpResult.ResultChan
 		if len(responseBody) == 0 {
-			err = errors.New("response body is empty")
+			err = errors.New("Response body is empty")
 			code = http.StatusInternalServerError
 		} else {
 			code = http.StatusOK
 		}
 	} else {
-		if redisResult.ErrorChan == nil {
-			fmt.Println("masuk sini")
+		if (redisResult.ErrorChan == nil) && (redisResult.ResultChan != "") {
 			responseBody = []byte(redisResult.ResultChan)
 			err = nil
 			code = http.StatusOK
