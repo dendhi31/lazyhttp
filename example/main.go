@@ -12,10 +12,10 @@ import (
 func main() {
 	httpReq, err := lazyhttp.New(lazyhttp.Config{
 		ExpiryTime:         10 * time.Minute,
-		HTTPRequestTimeout: 8,
+		HTTPRequestTimeout: 7,
 		WaitHttp:           1,
-		MainTimeout:        10,
-		StorageHostServer:  strings.Split("127.0.0.1:5000,127.0.0.1:7001,127.0.0.1:7002", ","),
+		//MainTimeout:        10,
+		StorageHostServer: strings.Split("127.0.0.1:5000,127.0.0.1:7001,127.0.0.1:7002", ","),
 	})
 	if err != nil {
 		fmt.Println(err.Error())
@@ -28,4 +28,5 @@ func main() {
 		fmt.Println("HTTP Code: ", httpCode)
 		fmt.Println("Response Body: ", string(body))
 	}
+	time.Sleep(12 * time.Second)
 }

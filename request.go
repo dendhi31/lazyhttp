@@ -51,6 +51,16 @@ type Client struct {
 	HTTPRequestTimeout time.Duration
 }
 
+type httpChannel struct {
+	ResultChan []byte
+	ErrorChan  error
+}
+
+type redisChannel struct {
+	ResultChan string
+	ErrorChan  error
+}
+
 type HTTPResponse struct {
 	StatusCode int    `json:"status_code"`
 	Body       string `json:"body"`
@@ -95,44 +105,46 @@ func New(config Config) (*Client, error) {
 }
 
 // getFromRedis Get value from redis based on described Key
-func (httprequest *Client) getFromRedis(ctx context.Context, key string, redisChan chan bool, redisResChan chan []byte, redisErrChan chan error) {
+func (httprequest *Client) getFromRedis(ctx context.Context, key string, redisChan chan redisChannel) {
 	//GET FROM REDIS
+	var redisChanStruct redisChannel
 	log.Println("Start request via redis")
 	cacheBody, err := httprequest.CacheClient.Get(key)
 	log.Println("Done request via redis")
 	if err != nil {
-		redisErrChan <- err
-		redisChan <- true
-		close(redisChan)
-		close(redisResChan)
-		close(redisErrChan)
-		return
+		redisChanStruct = redisChannel{
+			ErrorChan:  err,
+			ResultChan: "",
+		}
+	} else {
+		log.Println("Response via Redis", cacheBody)
+		redisChanStruct = redisChannel{
+			ErrorChan:  nil,
+			ResultChan: cacheBody,
+		}
 	}
-	log.Println("Response via Redis", cacheBody)
-	redisResChan <- []byte(cacheBody)
-	redisChan <- true
+	redisChan <- redisChanStruct
+	log.Println("Done set redis channel value, ", redisChanStruct)
 	close(redisChan)
-	close(redisResChan)
-	close(redisErrChan)
 }
 
 // doRequest Do HTTP Request to get response from server
-func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Request, key string, httpChan chan bool, httpResChan chan []byte, httpErrChan chan error) {
+func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Request, key string, httpChan chan httpChannel) {
 	ctx, cancelHttp := context.WithTimeout(context.Background(), httprequest.HTTPRequestTimeout*time.Second)
 	defer cancelHttp()
 
 	log.Println("Start request via HTTP")
+
+	var httpChanStruct httpChannel
 
 	response, err := httprequest.HTTPClient.Do(httpRequest.WithContext(ctx))
 	log.Println("Done request via HTTP: ", response)
 	if err != nil {
 		log.Println("Error request via HTTP: ", err.Error())
 		log.Println("HTTP timeout: ", int(httprequest.HTTPRequestTimeout))
-		httpErrChan <- err
-		httpChan <- true
+		httpChanStruct.ErrorChan = err
+		httpChan <- httpChanStruct
 		close(httpChan)
-		close(httpResChan)
-		close(httpErrChan)
 		return
 	}
 	responseBody, _ := ioutil.ReadAll(response.Body)
@@ -145,20 +157,19 @@ func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Requ
 		result, err := json.Marshal(httpResponse)
 		if err == nil {
 			_ = httprequest.CacheClient.Set(key, string(result), httprequest.ExpiryTime)
-			httpResChan <- result
+		} else {
+			httpChanStruct.ErrorChan = err
 		}
+		httpChanStruct.ResultChan = result
 	}
-	//httpErrChan <- errors.New("test")
-	httpChan <- true
+	httpChan <- httpChanStruct
+	log.Println("done set http channel value")
 	close(httpChan)
-	close(httpResChan)
-	close(httpErrChan)
 }
 
 // SendRequest will hit a defined endpoint and return a response body in byte format
 func (httprequest *Client) SendRequest(ctx context.Context, url string, action string, payload []byte, header map[string]string, key string) (int, []byte, error) {
-	//codeSig := make(chan int)
-	var statusCode int
+
 	var responseBody []byte
 
 	mCtx, cancel := context.WithTimeout(context.Background(), httprequest.WaitHttp*time.Second)
@@ -167,73 +178,57 @@ func (httprequest *Client) SendRequest(ctx context.Context, url string, action s
 	body := bytes.NewBuffer(payload)
 	httpRequest, err := http.NewRequest(action, url, body)
 	if err != nil {
-		return statusCode, responseBody, err
+		return 0, responseBody, err
 	}
 
 	for k, v := range header {
 		httpRequest.Header.Set(k, v)
 	}
 
-	httpChan := make(chan bool, 1)
-	redisChan := make(chan bool, 1)
-
-	httpResChan := make(chan []byte, 1)
-	redisResChan := make(chan []byte, 1)
-
-	httpErrChan := make(chan error, 1)
-	redisErrChan := make(chan error, 1)
+	httpChan := make(chan httpChannel, 1)
+	redisChan := make(chan redisChannel, 1)
 
 	go func() {
-		httprequest.doRequest(mCtx, httpRequest, key, httpChan, httpResChan, httpErrChan)
+		httprequest.doRequest(mCtx, httpRequest, key, httpChan)
 	}()
 
 	go func() {
-		httprequest.getFromRedis(mCtx, key, redisChan, redisResChan, redisErrChan)
+		httprequest.getFromRedis(mCtx, key, redisChan)
 	}()
 
-	//var response HTTPResponse
-	var errRedis error
-	var errHttp error
-	var redisBody []byte
-	var httpBody []byte
-	var httpStatus bool
-	var redisStatus bool
+	var httpResult httpChannel
+	var redisResult redisChannel
 exit:
 	for {
 		select {
 		case <-mCtx.Done():
-			if httpStatus != true {
-				log.Println("http wait got timeout", int(httprequest.WaitHttp))
-				httpStatus = true
-				errHttp = errors.New("context timeout HTTP")
-			}
-		case httpBody = <-httpResChan:
+			log.Println("http wait got timeout", int(httprequest.WaitHttp))
+			httpResult.ErrorChan = errors.New("context timeout HTTP")
+			fmt.Println("set error http")
 			break exit
-		case tempRedisBody := <-redisResChan:
-			if (len(redisBody) < 1) && (len(tempRedisBody) > 0) {
-				redisBody = tempRedisBody
+		case httpResult = <-httpChan:
+			if httpResult.ErrorChan == nil {
+				break exit
+			} else {
+				if redisResult.ErrorChan == nil {
+					break exit
+				}
 			}
-		case tempErrRedis := <-redisErrChan:
-			if errRedis == nil {
-				errRedis = tempErrRedis
+		case redisTempResult := <-redisChan:
+			if (redisChannel{}) != redisTempResult {
+				redisResult = redisTempResult
 			}
-		case tempErrHttp := <-httpErrChan:
-			if errHttp == nil {
-				errHttp = tempErrHttp
+			if httpResult.ErrorChan != nil {
+				break exit
 			}
-		case httpStatus = <-httpChan:
-		case redisStatus = <-redisChan:
 
-		}
-		if (redisStatus == true) && (httpStatus == true) {
-			break exit
 		}
 	}
 
 	var code int
 
-	if errHttp == nil {
-		responseBody = httpBody
+	if httpResult.ErrorChan == nil {
+		responseBody = httpResult.ResultChan
 		if len(responseBody) == 0 {
 			err = errors.New("response body is empty")
 			code = http.StatusInternalServerError
@@ -241,12 +236,13 @@ exit:
 			code = http.StatusOK
 		}
 	} else {
-		if errRedis == nil {
-			responseBody = redisBody
+		if redisResult.ErrorChan == nil {
+			fmt.Println("masuk sini")
+			responseBody = []byte(redisResult.ResultChan)
 			err = nil
 			code = http.StatusOK
 		} else {
-			err = errHttp
+			err = httpResult.ErrorChan
 			code = http.StatusInternalServerError
 		}
 	}
