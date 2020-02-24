@@ -153,7 +153,7 @@ func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Requ
 		}
 		result, err := json.Marshal(httpResponse)
 		if err == nil {
-			_ = httprequest.CacheClient.Set(key, string(result), httprequest.ExpiryTime)
+			_ = httprequest.CacheClient.Set(key, string(result), httprequest.ExpiryTime*time.Second)
 		} else {
 			httpChanStruct.ErrorChan = err
 		}
