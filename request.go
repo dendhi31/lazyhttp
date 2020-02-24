@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -63,8 +62,8 @@ type redisChannel struct {
 }
 
 type HTTPResponse struct {
-	StatusCode int    `json:"status_code"`
-	Body       string `json:"body"`
+	//StatusCode int    `json:"status_code"`
+	Body string `json:"body"`
 }
 
 // New will construct a customized http client
@@ -148,17 +147,8 @@ func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Requ
 	responseBody, _ := ioutil.ReadAll(response.Body)
 	log.Println("Response via HTTP", string(responseBody))
 	if response.StatusCode == http.StatusOK {
-		httpResponse := HTTPResponse{
-			StatusCode: response.StatusCode,
-			Body:       string(responseBody),
-		}
-		result, err := json.Marshal(httpResponse)
-		if err == nil {
-			_ = httprequest.CacheClient.Set(key, string(result), httprequest.ExpiryTime*time.Second)
-		} else {
-			httpChanStruct.ErrorChan = err
-		}
-		httpChanStruct.ResultChan = result
+		_ = httprequest.CacheClient.Set(key, string(responseBody), httprequest.ExpiryTime*time.Second)
+		httpChanStruct.ResultChan = responseBody
 	}
 	httpChan <- httpChanStruct
 	log.Println("done set http channel value")
