@@ -22,10 +22,10 @@ type Client struct {
 }
 
 // NewCacheClient will construct new client to be reused
-func NewCacheClient(hosts []string) (Cacher, error) {
+func NewCacheClient(hosts []string, db int) (Cacher, error) {
 	readTimeoutDuration := time.Duration(10) * time.Minute
 
-	redisClient, err := redis.NewClient(hosts, 0, readTimeoutDuration)
+	redisClient, err := redis.NewClient(hosts, db, readTimeoutDuration)
 
 	if err != nil {
 		return nil, err

@@ -32,6 +32,7 @@ type Config struct {
 	HTTPRequestTimeout time.Duration
 
 	StorageHostServer    []string
+	StorageDB            int
 	TempStorageKeyPrefix string
 	ExpiryTime           time.Duration
 	StorageTimeout       time.Duration
@@ -89,7 +90,7 @@ func New(config Config) (*Client, error) {
 	client.HTTPClient = httpClient
 
 	// initialize cache client and set prefix if not empty
-	cacher, err := cache.NewCacheClient(config.StorageHostServer)
+	cacher, err := cache.NewCacheClient(config.StorageHostServer, config.StorageDB)
 	if err != nil {
 		return nil, fmt.Errorf("error create cacher: %v", err)
 	}
