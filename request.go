@@ -71,7 +71,7 @@ func New(config Config) (*Client, error) {
 	transport := &http.Transport{
 		MaxIdleConns:    config.MaxIdleConnection,
 		IdleConnTimeout: config.IdleConnTimeout * time.Second,
-		MaxConnsPerHost: config.MaxConnectionPerHost,
+		//MaxConnsPerHost: config.MaxConnectionPerHost,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: config.InsecureSkipVerify,
 			Renegotiation:      tls.RenegotiateFreelyAsClient,
