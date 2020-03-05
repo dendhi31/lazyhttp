@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/dendhi31/lazyhttp/cache"
@@ -101,6 +102,8 @@ func New(config Config) (*Client, error) {
 	client.MainTimeOut = config.MainTimeout
 	client.WaitHttp = config.WaitHttp
 	client.HTTPRequestTimeout = config.HTTPRequestTimeout
+
+	log.SetOutput(os.Stdout)
 	return client, nil
 }
 
