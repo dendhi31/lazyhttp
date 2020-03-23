@@ -20,7 +20,11 @@ type RequestRequirement struct {
 }
 
 func (httprequest *Client) Consumer() {
-	//psc := httprequest.CacheClient.Publish()
+	psc := httprequest.CacheClient.Subscribe(httprequest.Channel)
+	for {
+		msg, _ := psc.ReceiveMessage()
+		fmt.Println(msg.String())
+	}
 }
 
 func (httprequest *Client) SendRequestWithPubSub(ctx context.Context, url string, action string, payload []byte, header map[string]string, key string) (int, []byte, error) {

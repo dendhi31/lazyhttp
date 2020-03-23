@@ -56,5 +56,5 @@ func (c *Client) Subscribe(channels ...string) *redis.PubSub {
 	if err != nil {
 		return nil
 	}
-	return &c.pubsub
+	return c.sentinel.Subscribe(channels...)
 }

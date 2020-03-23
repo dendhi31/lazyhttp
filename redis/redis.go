@@ -14,13 +14,14 @@ type Clienter interface {
 	Set(key string, value interface{}, ttl time.Duration) error
 	Remove(key string) error
 	Publish(channel string, value interface{}) error
+	Subscribe(channels ...string) *redis.PubSub
 }
 
 // Client is struct representative for redis Client
 type Client struct {
 	clientMu sync.Mutex
 	client   redis.Cmdable
-	pubsub   redis.PubSub
+	sentinel redis.SentinelClient
 
 	hosts       []string
 	dbName      int
