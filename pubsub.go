@@ -72,7 +72,6 @@ exit:
 		case <-mCtx.Done():
 			log.Println("HTTP wait got timeout", int(httprequest.WaitHttp))
 			err = errors.New("context timeout HTTP")
-			fmt.Println("Set error http")
 			break exit
 		case httpResult = <-httpChan:
 			responseBody = httpResult.ResultChan
@@ -81,10 +80,8 @@ exit:
 			break exit
 		}
 	}
-	fmt.Println("kampret")
 	if err != nil {
 		//publish to redis
-		fmt.Println("asu")
 		reqRequirement := RequestRequirement{
 			Url:     url,
 			Action:  action,
@@ -97,9 +94,10 @@ exit:
 			log.Println("Error encode json: ", err.Error())
 			return http.StatusInternalServerError, responseBody, err
 		}
-		fmt.Println("masuk nyet")
 		err2 := httprequest.CacheClient.Publish(httprequest.Channel, reqJson)
-		fmt.Println(err2)
+		if err2 != nil {
+			log.Println("Error publish message: ", err2.Error())
+		}
 		return http.StatusInternalServerError, responseBody, err
 	}
 	return code, responseBody, err

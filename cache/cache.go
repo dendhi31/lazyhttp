@@ -80,7 +80,6 @@ func (c *Client) addPrefix(key string) string {
 }
 
 func (c *Client) Publish(channel string, value interface{}) error {
-	fmt.Println("Publish nyet")
 	return c.redisClient.Publish(channel, value)
 }
 

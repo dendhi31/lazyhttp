@@ -12,5 +12,5 @@ require (
 	github.com/syariatifaris/arkeus v0.0.0-20180613183514-0880c3780042 // indirect
 	github.com/syariatifaris/redismaint v0.0.0-20191002083918-8085b51094ed // indirect
 	golang.org/x/net v0.0.0-20200202094626-16171245cfb2
-	golang.org/x/tools v0.0.0-20200220224806-8a925fa4c0df // indirect
+	golang.org/x/tools v0.0.0-20200220224806-8a925fa4c0df
 )
