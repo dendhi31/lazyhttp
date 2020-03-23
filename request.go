@@ -36,11 +36,12 @@ type Config struct {
 	TempStorageKeyPrefix string
 	ExpiryTime           time.Duration
 	StorageTimeout       time.Duration
+	Channel              string
 }
 
-type Requestor interface {
-	SendRequest(ctx context.Context, url, action string, payload []byte, header map[string]string, key string) (statusCode int, responseBody []byte, err error)
-}
+//type Requestor interface {
+//	SendRequest(ctx context.Context, url, action string, payload []byte, header map[string]string, key string) (statusCode int, responseBody []byte, err error)
+//}
 
 // Client will handle http request response by extending go http.Client package
 type Client struct {
@@ -50,6 +51,7 @@ type Client struct {
 	MainTimeOut        time.Duration
 	WaitHttp           time.Duration
 	HTTPRequestTimeout time.Duration
+	Channel            string
 }
 
 type httpChannel struct {
@@ -102,6 +104,7 @@ func New(config Config) (*Client, error) {
 	client.MainTimeOut = config.MainTimeout
 	client.WaitHttp = config.WaitHttp
 	client.HTTPRequestTimeout = config.HTTPRequestTimeout
+	client.Channel = config.Channel
 
 	log.SetOutput(os.Stdout)
 	return client, nil

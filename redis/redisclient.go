@@ -41,3 +41,20 @@ func (c *Client) Remove(key string) error {
 
 	return c.client.Del(key).Err()
 }
+
+func (c *Client) Publish(channel string, value interface{}) error {
+	err := c.checkConnection()
+	if err != nil {
+		return err
+	}
+
+	return c.client.Publish(channel, value).Err()
+}
+
+func (c *Client) Subscribe(channels ...string) *redis.PubSub {
+	err := c.checkConnection()
+	if err != nil {
+		return nil
+	}
+	return &c.pubsub
+}
