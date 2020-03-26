@@ -31,6 +31,8 @@ type Config struct {
 	WaitHttp           time.Duration
 	HTTPRequestTimeout time.Duration
 
+	PubSubServer string
+
 	StorageHostServer    []string
 	StorageDB            int
 	TempStorageKeyPrefix string
@@ -47,11 +49,13 @@ type Config struct {
 type Client struct {
 	HTTPClient         *http.Client
 	CacheClient        cache.Cacher
+	PubsubClient       cache.Cacher
 	ExpiryTime         time.Duration
 	MainTimeOut        time.Duration
 	WaitHttp           time.Duration
 	HTTPRequestTimeout time.Duration
 	Channel            string
+	PubSubServer       string
 }
 
 type httpChannel struct {
@@ -99,12 +103,23 @@ func New(config Config) (*Client, error) {
 	if config.TempStorageKeyPrefix != "" {
 		cacher.SetPrefix(config.TempStorageKeyPrefix)
 	}
+
+	pubServer, err := cache.NewCacheClient([]string{config.PubSubServer}, config.StorageDB)
+	if err != nil {
+		return nil, fmt.Errorf("error create cacher: %v", err)
+	}
+	if config.TempStorageKeyPrefix != "" {
+		cacher.SetPrefix(config.TempStorageKeyPrefix)
+	}
 	client.CacheClient = cacher
+	client.PubsubClient = pubServer
+
 	client.ExpiryTime = config.ExpiryTime
 	client.MainTimeOut = config.MainTimeout
 	client.WaitHttp = config.WaitHttp
 	client.HTTPRequestTimeout = config.HTTPRequestTimeout
 	client.Channel = config.Channel
+	client.PubSubServer = config.PubSubServer
 
 	log.SetOutput(os.Stdout)
 	return client, nil

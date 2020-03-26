@@ -5,25 +5,43 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
+
+	"github.com/dendhi31/lazyhttp/redismaint"
 )
 
-type RequestRequirement struct {
-	Url     string            `json:"url"`
-	Action  string            `json:"action"`
-	Payload []byte            `json:"payload"`
-	Header  map[string]string `json:"header"`
-	Key     string            `json:"key"`
-}
-
 func (httprequest *Client) Consumer() {
-	psc := httprequest.CacheClient.Subscribe(httprequest.Channel)
-	for {
-		msg, _ := psc.ReceiveMessage()
-		fmt.Println(msg.String())
+	config := redismaint.Configuration{
+		RedisURL:   httprequest.PubSubServer,
+		ContexName: "first",
+		Debug:      true,
+	}
+
+	rmaint, err := redismaint.New(config)
+	if err != nil {
+		log.Fatalln(err.Error())
+		return
+	}
+
+	term := make(chan os.Signal, 1)
+	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		log.Println("starting the lazyhttp consumer")
+		rmaint.Run()
+	}()
+	//send sample schedule
+	select {
+	case <-rmaint.Err():
+		log.Println("err", err)
+	case <-term:
+		rmaint.Stop()
+		log.Println("signal terminated detected")
 	}
 }
 
@@ -82,7 +100,7 @@ exit:
 	}
 	if err != nil {
 		//publish to redis
-		reqRequirement := RequestRequirement{
+		reqRequirement := redismaint.RequestRequirement{
 			Url:     url,
 			Action:  action,
 			Payload: payload,
@@ -94,7 +112,7 @@ exit:
 			log.Println("Error encode json: ", err.Error())
 			return http.StatusInternalServerError, responseBody, err
 		}
-		err2 := httprequest.CacheClient.Publish(httprequest.Channel, reqJson)
+		err2 := httprequest.PubsubClient.Publish(httprequest.Channel, reqJson)
 		if err2 != nil {
 			log.Println("Error publish message: ", err2.Error())
 		}

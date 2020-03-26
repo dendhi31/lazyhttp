@@ -3,8 +3,9 @@ module github.com/dendhi31/lazyhttp
 go 1.12
 
 require (
+	github.com/dendhi31/redismaint v0.0.0-20191002083918-8085b51094ed
 	github.com/go-redis/redis v6.15.7+incompatible
-	github.com/gomodule/redigo v2.0.0+incompatible // indirect
+	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/onsi/ginkgo v1.12.0 // indirect
 	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/pkg/errors v0.9.1
