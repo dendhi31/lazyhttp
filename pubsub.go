@@ -20,6 +20,7 @@ func (httprequest *Client) Consumer() {
 		RedisURL:   httprequest.PubSubServer,
 		ContexName: "first",
 		Debug:      true,
+		Handler:    httprequest.SendRequestWithPubSub,
 	}
 
 	rmaint, err := redismaint.New(config)

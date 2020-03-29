@@ -1,12 +1,17 @@
 package redismaint
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
+)
+
+type (
+	SendRequestWithPubSub func(ctx context.Context, url string, action string, payload []byte, header map[string]string, key string) (int, []byte, error)
 )
 
 //EventMessage as a message
@@ -24,11 +29,12 @@ type RequestRequirement struct {
 
 //MaintenanceScheduler structure
 type MaintenanceScheduler struct {
-	rclt  *redisc
-	hkey  string
-	echan chan error
-	schan chan bool
-	debug bool
+	rclt    *redisc
+	hkey    string
+	echan   chan error
+	schan   chan bool
+	debug   bool
+	handler SendRequestWithPubSub
 
 	sleepDuration time.Duration
 }
@@ -39,6 +45,7 @@ type Configuration struct {
 	ContexName    string
 	Debug         bool
 	SleepDuration time.Duration
+	Handler       SendRequestWithPubSub
 }
 
 //New creates new redis maintenance
@@ -54,6 +61,7 @@ func New(config Configuration) (*MaintenanceScheduler, error) {
 		schan:         make(chan bool, 1),
 		debug:         config.Debug,
 		sleepDuration: config.SleepDuration,
+		handler:       config.Handler,
 	}, nil
 }
 
@@ -71,8 +79,14 @@ func (m *MaintenanceScheduler) Run() {
 	for {
 		select {
 		case <-m.schan:
-			rc.Close()
-			psc.Close()
+			err := rc.Close()
+			if err != nil {
+				log.Println("err", err)
+			}
+			err = psc.Close()
+			if err != nil {
+				log.Println("err", err)
+			}
 			return
 		default:
 			switch msg := psc.Receive().(type) {
@@ -101,7 +115,11 @@ func (m *MaintenanceScheduler) process(bytes []byte) {
 		log.Println("err", err)
 		return
 	}
-	fmt.Println(req.Key)
+	_, _, err = m.handler(context.Background(), req.Url, req.Action, req.Payload, req.Header, req.Key)
+	if err != nil {
+		log.Println("err", err)
+		return
+	}
 	return
 }
 
