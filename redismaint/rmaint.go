@@ -27,8 +27,8 @@ type RequestRequirement struct {
 	Key     string            `json:"key"`
 }
 
-//MaintenanceScheduler structure
-type MaintenanceScheduler struct {
+//Consumer structure
+type Consumer struct {
 	rclt    *redisc
 	hkey    string
 	echan   chan error
@@ -39,7 +39,7 @@ type MaintenanceScheduler struct {
 	sleepDuration time.Duration
 }
 
-//Configuration as maintenance scheduler preferences
+//Configuration as consumer preferences
 type Configuration struct {
 	RedisURL      string
 	ContexName    string
@@ -49,12 +49,12 @@ type Configuration struct {
 }
 
 //New creates new redis maintenance
-func New(config Configuration) (*MaintenanceScheduler, error) {
+func New(config Configuration) (*Consumer, error) {
 	rclt, err := dial(config.RedisURL)
 	if err != nil {
 		return nil, err
 	}
-	return &MaintenanceScheduler{
+	return &Consumer{
 		rclt:          rclt,
 		hkey:          config.ContexName,
 		echan:         make(chan error, 1),
@@ -65,8 +65,8 @@ func New(config Configuration) (*MaintenanceScheduler, error) {
 	}, nil
 }
 
-//Run runs the maintainance scheduler
-func (m *MaintenanceScheduler) Run() {
+//Run runs the consumer
+func (m *Consumer) Run() {
 	rc := m.rclt.gconn()
 	psc := redis.PubSubConn{
 		Conn: rc,
@@ -81,17 +81,18 @@ func (m *MaintenanceScheduler) Run() {
 		case <-m.schan:
 			err := rc.Close()
 			if err != nil {
-				log.Println("err", err)
+				m.debugln("err", err)
 			}
 			err = psc.Close()
 			if err != nil {
-				log.Println("err", err)
+				m.debugln("err", err)
 			}
+			m.echan <- err
 			return
 		default:
 			switch msg := psc.Receive().(type) {
 			case redis.Message:
-				go m.process(msg.Data)
+				m.process(msg.Data)
 				time.Sleep(1 * time.Second)
 			}
 		}
@@ -99,16 +100,16 @@ func (m *MaintenanceScheduler) Run() {
 }
 
 //Err returns error channel
-func (m *MaintenanceScheduler) Err() <-chan error {
+func (m *Consumer) Err() <-chan error {
 	return m.echan
 }
 
 //Stop set stop flag
-func (m *MaintenanceScheduler) Stop() {
+func (m *Consumer) Stop() {
 	m.schan <- true
 }
 
-func (m *MaintenanceScheduler) process(bytes []byte) {
+func (m *Consumer) process(bytes []byte) {
 	var req RequestRequirement
 	fmt.Println(string(bytes))
 	err := json.Unmarshal(bytes, &req)
@@ -124,7 +125,7 @@ func (m *MaintenanceScheduler) process(bytes []byte) {
 	return
 }
 
-func (m *MaintenanceScheduler) debugln(args ...interface{}) {
+func (m *Consumer) debugln(args ...interface{}) {
 	if m.debug {
 		log.Println(args...)
 	}
