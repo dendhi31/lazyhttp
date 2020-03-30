@@ -15,18 +15,17 @@ import (
 	"github.com/dendhi31/lazyhttp/redismaint"
 )
 
-func (httprequest *Client) Consumer() {
+func (httprequest *Client) Consumer() error {
 	config := redismaint.Configuration{
 		RedisURL:   httprequest.PubSubServer,
 		ContexName: "first",
 		Debug:      true,
-		Handler:    httprequest.SendRequestWithPubSub,
+		Handler:    httprequest.optimisticReq,
 	}
 
 	rmaint, err := redismaint.New(config)
 	if err != nil {
-		log.Fatalln(err.Error())
-		return
+		return err
 	}
 
 	term := make(chan os.Signal, 1)
@@ -39,14 +38,14 @@ func (httprequest *Client) Consumer() {
 	//send sample schedule
 	select {
 	case <-rmaint.Err():
-		log.Println("err", err)
+		return err
 	case <-term:
 		rmaint.Stop()
-		log.Println("signal terminated detected")
+		return nil
 	}
 }
 
-func (httprequest *Client) SendRequestWithPubSub(ctx context.Context, url string, action string, payload []byte, header map[string]string, key string) (int, []byte, error) {
+func (httprequest *Client) optimisticReq(ctx context.Context, url string, action string, payload []byte, header map[string]string, key string) (int, []byte, error) {
 	var responseBody []byte
 	var err error
 	var code int

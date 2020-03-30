@@ -176,8 +176,17 @@ func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Requ
 	close(httpChan)
 }
 
+func (httprequest *Client) SendRequest(ctx context.Context, url string, action string, payload []byte, header map[string]string, key string, useCache bool) (code int, body []byte, err error) {
+	if useCache == true {
+		code, body, err = httprequest.optimisticReq(ctx, url, action, payload, header, key)
+	} else {
+		code, body, err = httprequest.pesimisticReq(ctx, url, action, payload, header, key)
+	}
+	return code, body, err
+}
+
 // SendRequest will hit a defined endpoint and return a response body in byte format
-func (httprequest *Client) SendRequest(ctx context.Context, url string, action string, payload []byte, header map[string]string, key string) (int, []byte, error) {
+func (httprequest *Client) pesimisticReq(ctx context.Context, url string, action string, payload []byte, header map[string]string, key string) (int, []byte, error) {
 
 	var responseBody []byte
 

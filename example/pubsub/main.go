@@ -23,7 +23,7 @@ func main() {
 		log.Fatal(err)
 		fmt.Println(err.Error())
 	}
-	httpCode, body, err := httpReq.SendRequestWithPubSub(context.Background(), "http://localhost:9096/foo", "GET", nil, nil, "test")
+	httpCode, body, err := httpReq.SendRequest(context.Background(), "http://localhost:9096/foo", "GET", nil, nil, "test", true)
 	fmt.Println("=====")
 	if err != nil {
 		fmt.Println("Error: ", err.Error())
