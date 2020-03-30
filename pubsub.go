@@ -116,6 +116,8 @@ exit:
 		err2 := httprequest.PubsubClient.Publish(httprequest.Channel, reqJson)
 		if err2 != nil {
 			log.Println("Error publish message: ", err2.Error())
+		} else {
+			log.Println("Message published to pubsub : ", string(reqJson))
 		}
 		return http.StatusInternalServerError, responseBody, err
 	}

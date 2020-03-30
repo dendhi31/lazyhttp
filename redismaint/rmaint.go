@@ -92,6 +92,7 @@ func (m *MaintenanceScheduler) Run() {
 			switch msg := psc.Receive().(type) {
 			case redis.Message:
 				go m.process(msg.Data)
+				time.Sleep(1 * time.Second)
 			}
 		}
 	}

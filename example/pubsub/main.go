@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/dendhi31/lazyhttp"
 	"golang.org/x/net/context"
@@ -32,5 +31,4 @@ func main() {
 		fmt.Println("HTTP Code: ", httpCode)
 		fmt.Println("Response Body: ", string(body))
 	}
-	time.Sleep(12 * time.Second)
 }
