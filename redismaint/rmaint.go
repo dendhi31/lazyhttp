@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
+
+	"github.com/dendhi31/lazyhttp/logger"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -33,7 +34,7 @@ type Consumer struct {
 	hkey    string
 	echan   chan error
 	schan   chan bool
-	debug   bool
+	Logger  logger.Logger
 	handler SendRequestWithPubSub
 
 	sleepDuration time.Duration
@@ -43,9 +44,9 @@ type Consumer struct {
 type Configuration struct {
 	RedisURL      string
 	ContexName    string
-	Debug         bool
 	SleepDuration time.Duration
 	Handler       SendRequestWithPubSub
+	Logger        logger.Logger
 }
 
 //New creates new redis maintenance
@@ -59,7 +60,7 @@ func New(config Configuration) (*Consumer, error) {
 		hkey:          config.ContexName,
 		echan:         make(chan error, 1),
 		schan:         make(chan bool, 1),
-		debug:         config.Debug,
+		Logger:        config.Logger,
 		sleepDuration: config.SleepDuration,
 		handler:       config.Handler,
 	}, nil
@@ -81,11 +82,11 @@ func (m *Consumer) Run() {
 		case <-m.schan:
 			err := rc.Close()
 			if err != nil {
-				m.debugln("err", err)
+				m.Logger.Debugln("err", err)
 			}
 			err = psc.Close()
 			if err != nil {
-				m.debugln("err", err)
+				m.Logger.Debugln("err", err)
 			}
 			m.echan <- err
 			return
@@ -93,7 +94,6 @@ func (m *Consumer) Run() {
 			switch msg := psc.Receive().(type) {
 			case redis.Message:
 				m.process(msg.Data)
-				time.Sleep(1 * time.Second)
 			}
 		}
 	}
@@ -111,22 +111,16 @@ func (m *Consumer) Stop() {
 
 func (m *Consumer) process(bytes []byte) {
 	var req RequestRequirement
-	fmt.Println(string(bytes))
+	m.Logger.Debugln("incoming message: ", string(bytes))
 	err := json.Unmarshal(bytes, &req)
 	if err != nil {
-		log.Println("err", err)
+		m.Logger.Debugln("err", err)
 		return
 	}
 	_, _, err = m.handler(context.Background(), req.Url, req.Action, req.Payload, req.Header, req.Key)
 	if err != nil {
-		log.Println("err", err)
+		m.Logger.Debugln("err", err)
 		return
 	}
 	return
-}
-
-func (m *Consumer) debugln(args ...interface{}) {
-	if m.debug {
-		log.Println(args...)
-	}
 }

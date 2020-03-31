@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dendhi31/lazyhttp/cache"
+	"github.com/dendhi31/lazyhttp/logger"
 )
 
 // Config is a configuration that will be used when constructing a new instance of Requestor
@@ -31,7 +32,7 @@ type Config struct {
 	WaitHttp           time.Duration
 	HTTPRequestTimeout time.Duration
 
-	PubSubServer string
+	RedisHost string
 
 	StorageHostServer    []string
 	StorageDB            int
@@ -39,6 +40,8 @@ type Config struct {
 	ExpiryTime           time.Duration
 	StorageTimeout       time.Duration
 	Channel              string
+
+	Debug bool
 }
 
 //type Requestor interface {
@@ -56,6 +59,7 @@ type Client struct {
 	HTTPRequestTimeout time.Duration
 	Channel            string
 	PubSubServer       string
+	Logger             logger.Logger
 }
 
 type httpChannel struct {
@@ -104,7 +108,7 @@ func New(config Config) (*Client, error) {
 		cacher.SetPrefix(config.TempStorageKeyPrefix)
 	}
 
-	pubServer, err := cache.NewCacheClient([]string{config.PubSubServer}, config.StorageDB)
+	pubServer, err := cache.NewCacheClient([]string{config.RedisHost}, config.StorageDB)
 	if err != nil {
 		return nil, fmt.Errorf("error create cacher: %v", err)
 	}
@@ -119,8 +123,8 @@ func New(config Config) (*Client, error) {
 	client.WaitHttp = config.WaitHttp
 	client.HTTPRequestTimeout = config.HTTPRequestTimeout
 	client.Channel = config.Channel
-	client.PubSubServer = config.PubSubServer
-
+	client.PubSubServer = config.RedisHost
+	client.Logger = logger.New(logger.Config{Debug: config.Debug})
 	log.SetOutput(os.Stdout)
 	return client, nil
 }
@@ -129,23 +133,23 @@ func New(config Config) (*Client, error) {
 func (httprequest *Client) getFromRedis(ctx context.Context, key string, redisChan chan redisChannel) {
 	//GET FROM REDIS
 	var redisChanStruct redisChannel
-	log.Println("Start request via redis")
+	httprequest.Logger.Debugln("Start request via redis")
 	cacheBody, err := httprequest.CacheClient.Get(key)
-	log.Println("Done request via redis")
+	httprequest.Logger.Debugln("Done request via redis")
 	if err != nil {
 		redisChanStruct = redisChannel{
 			ErrorChan:  err,
 			ResultChan: "",
 		}
 	} else {
-		log.Println("Response via Redis", cacheBody)
+		httprequest.Logger.Debugln("Response via Redis", cacheBody)
 		redisChanStruct = redisChannel{
 			ErrorChan:  nil,
 			ResultChan: cacheBody,
 		}
 	}
 	redisChan <- redisChanStruct
-	log.Println("Done set redis channel value, ", redisChanStruct)
+	httprequest.Logger.Debugln("Done set redis channel value, ", redisChanStruct)
 	close(redisChan)
 }
 
@@ -157,36 +161,34 @@ func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Requ
 	var httpChanStruct httpChannel
 
 	response, err := httprequest.HTTPClient.Do(httpRequest.WithContext(ctx))
-	log.Println("Done request via HTTP: ", response)
+	httprequest.Logger.Debugln("Done request via HTTP: ", response)
 	if err != nil {
-		log.Println("Error request via HTTP: ", err.Error())
+		httprequest.Logger.Debugln("Error request via HTTP: ", err.Error())
 		httpChanStruct.ErrorChan = err
 		httpChan <- httpChanStruct
 		close(httpChan)
 		return
 	}
 	responseBody, _ := ioutil.ReadAll(response.Body)
-	log.Println("Response via HTTP", string(responseBody))
+	httprequest.Logger.Debugln("Response via HTTP", string(responseBody))
 	if response.StatusCode == http.StatusOK {
 		_ = httprequest.CacheClient.Set(key, string(responseBody), httprequest.ExpiryTime*time.Second)
 		httpChanStruct.ResultChan = responseBody
 	}
 	httpChan <- httpChanStruct
-	log.Println("done set http channel value")
+	httprequest.Logger.Debugln("done set http channel value")
 	close(httpChan)
 }
 
 func (httprequest *Client) SendRequest(ctx context.Context, url string, action string, payload []byte, header map[string]string, key string, useCache bool) (code int, body []byte, err error) {
-	if useCache == true {
-		code, body, err = httprequest.optimisticReq(ctx, url, action, payload, header, key)
-	} else {
-		code, body, err = httprequest.pesimisticReq(ctx, url, action, payload, header, key)
+	if useCache {
+		return httprequest.optimisticReq(ctx, url, action, payload, header, key)
 	}
-	return code, body, err
+	return httprequest.pessimisticReq(ctx, url, action, payload, header, key)
 }
 
 // SendRequest will hit a defined endpoint and return a response body in byte format
-func (httprequest *Client) pesimisticReq(ctx context.Context, url string, action string, payload []byte, header map[string]string, key string) (int, []byte, error) {
+func (httprequest *Client) pessimisticReq(ctx context.Context, url string, action string, payload []byte, header map[string]string, key string) (int, []byte, error) {
 
 	var responseBody []byte
 
@@ -220,9 +222,9 @@ exit:
 	for {
 		select {
 		case <-mCtx.Done():
-			log.Println("HTTP wait got timeout", int(httprequest.WaitHttp))
+			httprequest.Logger.Debugln("HTTP wait got timeout", int(httprequest.WaitHttp))
 			httpResult.ErrorChan = errors.New("context timeout HTTP")
-			fmt.Println("Set error http")
+			httprequest.Logger.Debugln("Set error http")
 			break exit
 		case httpResult = <-httpChan:
 			if httpResult.ErrorChan == nil {

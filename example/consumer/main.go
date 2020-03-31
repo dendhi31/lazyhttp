@@ -16,7 +16,8 @@ func main() {
 		StorageHostServer:  strings.Split("127.0.0.1:5000,127.0.0.1:7001,127.0.0.1:7002", ","),
 		StorageDB:          1,
 		Channel:            "first",
-		PubSubServer:       "localhost:6379",
+		RedisHost:          "localhost:6379",
+		Debug:              true,
 	})
 	if err != nil {
 		log.Fatal(err)

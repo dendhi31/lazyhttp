@@ -19,7 +19,7 @@ func (httprequest *Client) Consumer() error {
 	config := redismaint.Configuration{
 		RedisURL:   httprequest.PubSubServer,
 		ContexName: "first",
-		Debug:      true,
+		Logger:     httprequest.Logger,
 		Handler:    httprequest.optimisticReq,
 	}
 
@@ -31,15 +31,16 @@ func (httprequest *Client) Consumer() error {
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
 
-	go func() {
-		log.Println("starting the lazyhttp consumer")
-		rmaint.Run()
-	}()
+	go func(r *redismaint.Consumer) {
+		log.Println("lazyhttp consumer started")
+		r.Run()
+	}(rmaint)
 	//send sample schedule
 	select {
 	case <-rmaint.Err():
 		return err
 	case <-term:
+		log.Println("lazyhttp consumer stopped")
 		rmaint.Stop()
 		return nil
 	}
@@ -88,7 +89,7 @@ exit:
 	for {
 		select {
 		case <-mCtx.Done():
-			log.Println("HTTP wait got timeout", int(httprequest.WaitHttp))
+			httprequest.Logger.Debugln("HTTP wait got timeout", int(httprequest.WaitHttp))
 			err = errors.New("context timeout HTTP")
 			break exit
 		case httpResult = <-httpChan:
@@ -109,14 +110,14 @@ exit:
 		}
 		reqJson, err := json.Marshal(reqRequirement)
 		if err != nil {
-			log.Println("Error encode json: ", err.Error())
+			httprequest.Logger.Debugln("Error encode json: ", err.Error())
 			return http.StatusInternalServerError, responseBody, err
 		}
 		err2 := httprequest.PubsubClient.Publish(httprequest.Channel, reqJson)
 		if err2 != nil {
-			log.Println("Error publish message: ", err2.Error())
+			httprequest.Logger.Debugln("Error publish message: ", err2.Error())
 		} else {
-			log.Println("Message published to pubsub : ", string(reqJson))
+			httprequest.Logger.Debugln("Message published to pubsub : ", string(reqJson))
 		}
 		return http.StatusInternalServerError, responseBody, err
 	}
