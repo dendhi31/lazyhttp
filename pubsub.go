@@ -81,9 +81,9 @@ func (httprequest *Client) optimisticReq(ctx context.Context, url string, action
 	for k, v := range header {
 		httpRequest.Header.Set(k, v)
 	}
-	go func() {
-		httprequest.doRequest(mCtx, httpRequest, key, httpChan)
-	}()
+	go func(ctx context.Context, http *http.Request, key string, channel chan httpChannel) {
+		httprequest.doRequest(ctx, http, key, channel)
+	}(mCtx, httpRequest, key, httpChan)
 exit:
 	for {
 		select {
