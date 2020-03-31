@@ -110,15 +110,13 @@ exit:
 		reqJson, err := json.Marshal(reqRequirement)
 		if err != nil {
 			httprequest.Logger.Debugln("Error encode json: ", err.Error())
-			return http.StatusInternalServerError, responseBody, err
+			return 0, responseBody, err
 		}
 		err2 := httprequest.PubsubClient.Publish(httprequest.Channel, reqJson)
 		if err2 != nil {
 			httprequest.Logger.Debugln("Error publish message: ", err2.Error())
-		} else {
-			httprequest.Logger.Debugln("Message published to pubsub : ", string(reqJson))
 		}
-		return http.StatusInternalServerError, responseBody, err
+		return 0, responseBody, err
 	}
 	return code, responseBody, err
 }
