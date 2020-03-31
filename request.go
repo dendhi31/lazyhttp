@@ -30,6 +30,7 @@ type Config struct {
 
 	MainTimeout        time.Duration
 	WaitHttp           time.Duration
+	WaitRedis          time.Duration
 	HTTPRequestTimeout time.Duration
 
 	RedisHost string
@@ -56,6 +57,7 @@ type Client struct {
 	ExpiryTime         time.Duration
 	MainTimeOut        time.Duration
 	WaitHttp           time.Duration
+	WaitRedis          time.Duration
 	HTTPRequestTimeout time.Duration
 	Channel            string
 	PubSubServer       string
@@ -81,7 +83,7 @@ type HTTPResponse struct {
 func New(config Config) (*Client, error) {
 	transport := &http.Transport{
 		MaxIdleConns:    config.MaxIdleConnection,
-		IdleConnTimeout: config.IdleConnTimeout * time.Second,
+		IdleConnTimeout: config.IdleConnTimeout * time.Millisecond,
 		//MaxConnsPerHost: config.MaxConnectionPerHost,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: config.InsecureSkipVerify,
@@ -93,7 +95,7 @@ func New(config Config) (*Client, error) {
 	}
 	httpClient := &http.Client{
 		Transport: transport,
-		Timeout:   config.HTTPRequestTimeout * time.Second,
+		Timeout:   config.HTTPRequestTimeout * time.Millisecond,
 	}
 
 	client := &Client{}
@@ -121,6 +123,10 @@ func New(config Config) (*Client, error) {
 	client.ExpiryTime = config.ExpiryTime
 	client.MainTimeOut = config.MainTimeout
 	client.WaitHttp = config.WaitHttp
+	if config.WaitRedis < 1 {
+		config.WaitRedis = 500
+	}
+	client.WaitRedis = config.WaitRedis
 	client.HTTPRequestTimeout = config.HTTPRequestTimeout
 	client.Channel = config.Channel
 	client.PubSubServer = config.RedisHost
@@ -155,7 +161,7 @@ func (httprequest *Client) getFromRedis(ctx context.Context, key string, redisCh
 
 // doRequest Do HTTP Request to get response from server
 func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Request, key string, httpChan chan httpChannel) {
-	ctx, cancelHttp := context.WithTimeout(context.Background(), httprequest.HTTPRequestTimeout*time.Second)
+	ctx, cancelHttp := context.WithTimeout(context.Background(), httprequest.HTTPRequestTimeout*time.Millisecond)
 	defer cancelHttp()
 
 	var httpChanStruct httpChannel
@@ -172,7 +178,7 @@ func (httprequest *Client) doRequest(ctx context.Context, httpRequest *http.Requ
 	responseBody, _ := ioutil.ReadAll(response.Body)
 	httprequest.Logger.Debugln("Response via HTTP", string(responseBody))
 	if response.StatusCode == http.StatusOK {
-		_ = httprequest.CacheClient.Set(key, string(responseBody), httprequest.ExpiryTime*time.Second)
+		_ = httprequest.CacheClient.Set(key, string(responseBody), httprequest.ExpiryTime*time.Millisecond)
 		httpChanStruct.ResultChan = responseBody
 	}
 	httpChan <- httpChanStruct
@@ -192,7 +198,7 @@ func (httprequest *Client) pessimisticReq(ctx context.Context, url string, actio
 
 	var responseBody []byte
 
-	mCtx, cancel := context.WithTimeout(context.Background(), httprequest.WaitHttp*time.Second)
+	mCtx, cancel := context.WithTimeout(context.Background(), httprequest.WaitHttp*time.Millisecond)
 	defer cancel()
 
 	body := bytes.NewBuffer(payload)

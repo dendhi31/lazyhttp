@@ -50,23 +50,32 @@ func (httprequest *Client) optimisticReq(ctx context.Context, url string, action
 	var err error
 	var code int
 
-	mCtx, cancel := context.WithTimeout(context.Background(), httprequest.WaitHttp*time.Second)
+	mCtx, cancel := context.WithTimeout(context.Background(), httprequest.WaitHttp*time.Millisecond)
 	defer cancel()
+
+	redisCtx, cancelRedis := context.WithTimeout(context.Background(), httprequest.WaitRedis*time.Millisecond)
+	defer cancelRedis()
 
 	redisChan := make(chan redisChannel, 1)
 	httpChan := make(chan httpChannel, 1)
 
 	go func(ctx context.Context, client *Client, key string, channel chan redisChannel) {
 		client.getFromRedis(ctx, key, channel)
-	}(mCtx, httprequest, key, redisChan)
+	}(redisCtx, httprequest, key, redisChan)
 
 	var redisResult redisChannel
 	var httpResult httpChannel
 	select {
+	case <-redisCtx.Done():
+		httprequest.Logger.Debugln("Redis wait got timeout", int(httprequest.WaitRedis))
+		err = errors.New("context timeout redis")
+		redisResult.ErrorChan = err
+		break
 	case redisTempResult := <-redisChan:
 		if (redisChannel{}) != redisTempResult {
 			redisResult = redisTempResult
 		}
+		break
 	}
 
 	if (redisResult.ErrorChan == nil) && (redisResult.ResultChan != "") {
