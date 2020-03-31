@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -32,7 +31,7 @@ func (httprequest *Client) Consumer() error {
 	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
 
 	go func(r *redismaint.Consumer) {
-		log.Println("lazyhttp consumer started")
+		httprequest.Logger.Debugln("lazyhttp consumer started")
 		r.Run()
 	}(rmaint)
 	//send sample schedule
@@ -40,7 +39,7 @@ func (httprequest *Client) Consumer() error {
 	case <-rmaint.Err():
 		return err
 	case <-term:
-		log.Println("lazyhttp consumer stopped")
+		httprequest.Logger.Debugln("lazyhttp consumer stopped")
 		rmaint.Stop()
 		return nil
 	}
@@ -57,9 +56,9 @@ func (httprequest *Client) optimisticReq(ctx context.Context, url string, action
 	redisChan := make(chan redisChannel, 1)
 	httpChan := make(chan httpChannel, 1)
 
-	go func() {
-		httprequest.getFromRedis(mCtx, key, redisChan)
-	}()
+	go func(ctx context.Context, client *Client, key string, channel chan redisChannel) {
+		client.getFromRedis(ctx, key, channel)
+	}(mCtx, httprequest, key, redisChan)
 
 	var redisResult redisChannel
 	var httpResult httpChannel
